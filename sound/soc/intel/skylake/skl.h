@@ -70,6 +70,7 @@ struct skl {
 	struct list_head ppl_list;
 
 	const struct firmware *tplg;
+	const char *fw_name;
 };
 
 #define skl_to_ebus(s)	(&(s)->ebus)
