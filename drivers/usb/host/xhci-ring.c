@@ -1309,15 +1309,58 @@ static void handle_cmd_completion(struct xhci_hcd *xhci,
 	/* Does the DMA address match our internal dequeue pointer address? */
 	if (cmd_dma != (u64) cmd_dequeue_dma) {
 		xhci->error_bitmask |= 1 << 5;
+		xhci_err(xhci, "cmd_dma %llu != cmd_dequeue_dma @ %llu \n",
+			 cmd_dma, cmd_dequeue_dma);
 		return;
 	}
 
 	cmd = list_entry(xhci->cmd_list.next, struct xhci_command, cmd_list);
 
 	if (cmd->command_trb != xhci->cmd_ring->dequeue) {
+		struct xhci_command *cur_cmd, *tmp_cmd;
+		union xhci_trb *tmp_trb;
+		u64 addr;
+		int i;
+
 		xhci_err(xhci,
 			 "Command completion event does not match command\n");
-		return;
+		xhci_err(xhci, "cmd ring deq @ %p \n", xhci->cmd_ring->dequeue);
+		xhci_err(xhci, "cmd->command_trb  @ %p \n", cmd->command_trb);
+		xhci_err(xhci, "cmd comp ev points at @ cmd %llx\n", cmd_dma);
+		xhci_err(xhci, "command list head to tail:\n");
+		list_for_each_entry_safe(cur_cmd, tmp_cmd, &xhci->cmd_list, cmd_list) {
+			xhci_err(xhci,"  @ %p ",cur_cmd->command_trb);
+		}
+		addr = xhci->event_ring->deq_seg->dma;
+	        tmp_trb = xhci->event_ring->deq_seg->trbs;
+
+		xhci_err(xhci, "Dump event ring, deq @ %p:\n",
+			xhci->event_ring->dequeue);
+		for (i = 0; i < TRBS_PER_SEGMENT; ++i) {
+			tmp_trb = &xhci->event_ring->deq_seg->trbs[i];
+			xhci_err(xhci, "@%016llx %08x %08x %08x %08x\n", addr,
+				lower_32_bits(le64_to_cpu(tmp_trb->link.segment_ptr)),
+				upper_32_bits(le64_to_cpu(tmp_trb->link.segment_ptr)),
+				le32_to_cpu(tmp_trb->link.intr_target),
+				le32_to_cpu(tmp_trb->link.control));
+			addr += sizeof(*tmp_trb);
+		}
+
+		addr = xhci->cmd_ring->deq_seg->dma;
+	        tmp_trb = xhci->cmd_ring->deq_seg->trbs;
+
+		xhci_err(xhci, "Dump command ring, deq @%p:\n",
+			 xhci->cmd_ring->dequeue);
+		for (i = 0; i < TRBS_PER_SEGMENT; ++i) {
+			tmp_trb = &xhci->cmd_ring->deq_seg->trbs[i];
+			xhci_err(xhci, "@%016llx %08x %08x %08x %08x\n", addr,
+				lower_32_bits(le64_to_cpu(tmp_trb->link.segment_ptr)),
+				upper_32_bits(le64_to_cpu(tmp_trb->link.segment_ptr)),
+				le32_to_cpu(tmp_trb->link.intr_target),
+				le32_to_cpu(tmp_trb->link.control));
+			addr += sizeof(*tmp_trb);
+		}
+				return;
 	}
 
 	del_timer(&xhci->cmd_timer);
